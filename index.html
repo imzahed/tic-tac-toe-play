@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic Tac Toe</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- React and ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Framer Motion (CDN) -->
+    <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%);
+            min-height: 100vh;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        }
+        .glass-dark {
+            background: rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useCallback } = React;
+        const { motion, AnimatePresence } = window.Motion;
+
+        const WINNING_COMBINATIONS = [
+            [0, 1, 2], [3, 4, 5], [6, 7, 8],
+            [0, 3, 6], [1, 4, 7], [2, 5, 8],
+            [0, 4, 8], [2, 4, 6]
+        ];
+
+        function App() {
+            const [board, setBoard] = useState(Array(9).fill(null));
+            const [xIsNext, setXIsNext] = useState(true);
+            const [scores, setScores] = useState({ X: 0, O: 0, draws: 0 });
+            const [winner, setWinner] = useState(null);
+            const [winningLine, setWinningLine] = useState(null);
+            const [isSoundEnabled, setIsSoundEnabled] = useState(true);
+            const [showModal, setShowModal] = useState(false);
+            const [gameStarted, setGameStarted] = useState(false);
+            const [playerNames, setPlayerNames] = useState({ X: '', O: '' });
+
+            const playSound = useCallback((type) => {
+                if (!isSoundEnabled) return;
+                const frequencies = { click: xIsNext ? 440 : 554.37, win: 880, draw: 220 };
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(frequencies[type], ctx.currentTime);
+                gain.gain.setValueAtTime(0.1, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + (type === 'click' ? 0.1 : 0.5));
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + (type === 'click' ? 0.1 : 0.5));
+            }, [isSoundEnabled, xIsNext]);
+
+            const checkWinner = (squares) => {
+                for (const [a, b, c] of WINNING_COMBINATIONS) {
+                    if (squares[a] && squares[a] === squares[b] && squares[a] === squares[c]) {
+                        return { winner: squares[a], line: [a, b, c] };
+                    }
+                }
+                if (squares.every(s => s !== null)) return { winner: 'draw', line: null };
+                return null;
+            };
+
+            const handleClick = (i) => {
+                if (board[i] || winner) return;
+                const newBoard = [...board];
+                newBoard[i] = xIsNext ? 'X' : 'O';
+                setBoard(newBoard);
+                playSound('click');
+                const result = checkWinner(newBoard);
+                if (result) {
+                    if (result.winner === 'draw') {
+                        setScores(s => ({ ...s, draws: s.draws + 1 }));
+                        playSound('draw');
+                    } else {
+                        setWinner(result.winner);
+                        setWinningLine(result.line);
+                        setScores(s => ({ ...s, [result.winner]: s[result.winner] + 1 }));
+                        playSound('win');
+                    }
+                    setTimeout(() => setShowModal(true), 600);
+                } else {
+                    setXIsNext(!xIsNext);
+                }
+            };
+
+            const resetGame = () => {
+                setBoard(Array(9).fill(null));
+                setXIsNext(true);
+                setWinner(null);
+                setWinningLine(null);
+                setShowModal(false);
+            };
+
+            const handleStartGame = (e) => {
+                e.preventDefault();
+                if (playerNames.X.trim() && playerNames.O.trim()) {
+                    setGameStarted(true);
+                }
+            };
+
+            if (!gameStarted) {
+                return (
+                    <div className="flex flex-col items-center justify-center p-4 w-full">
+                        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="glass p-8 rounded-3xl w-full max-w-md text-center">
+                            <h1 className="text-4xl font-bold text-white mb-8">Enter Players</h1>
+                            <form onSubmit={handleStartGame} className="space-y-6">
+                                <div className="space-y-2 text-left">
+                                    <label className="text-white/70 text-sm font-semibold ml-1">Player X Name</label>
+                                    <input required type="text" value={playerNames.X} onChange={(e) => setPlayerNames({ ...playerNames, X: e.target.value })} placeholder="e.g. Zahed" className="w-full bg-white/10 border border-white/20 rounded-2xl px-5 py-4 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 transition-all" />
+                                </div>
+                                <div className="space-y-2 text-left">
+                                    <label className="text-white/70 text-sm font-semibold ml-1">Player O Name</label>
+                                    <input required type="text" value={playerNames.O} onChange={(e) => setPlayerNames({ ...playerNames, O: e.target.value })} placeholder="e.g. Friend" className="w-full bg-white/10 border border-white/20 rounded-2xl px-5 py-4 text-white placeholder:text-white/30 focus:outline-none focus:ring-2 focus:ring-white/50 transition-all" />
+                                </div>
+                                <button type="submit" className="w-full py-4 bg-white text-indigo-600 font-bold rounded-2xl hover:bg-indigo-50 transition-colors shadow-lg active:scale-95 mt-4">Start Game</button>
+                            </form>
+                        </motion.div>
+                        <footer className="mt-12 text-white/60 text-sm font-medium">
+                            All Right Reserved By <a href="https://www.facebook.com/imzahed" target="_blank" rel="noopener noreferrer" className="text-white hover:text-white/90 transition-colors">Zahed</a>
+                        </footer>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="flex flex-col items-center justify-center p-4 w-full">
+                    <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="text-center mb-8">
+                        <h1 className="text-5xl font-bold text-white tracking-tight drop-shadow-lg mb-2">Tic Tac Toe</h1>
+                        <p className="text-white/80 font-medium">Modern. Smooth. Minimal.</p>
+                    </motion.div>
+
+                    <div className="grid grid-cols-3 gap-4 mb-8 w-full max-w-md">
+                        <ScoreCard label={playerNames.X} score={scores.X} active={xIsNext && !winner} color="text-indigo-200" />
+                        <ScoreCard label="Draws" score={scores.draws} active={false} color="text-slate-200" />
+                        <ScoreCard label={playerNames.O} score={scores.O} active={!xIsNext && !winner} color="text-pink-200" />
+                    </div>
+
+                    <div className="relative">
+                        <motion.div className="glass p-4 rounded-3xl" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
+                            <div className="grid grid-cols-3 gap-3">
+                                {board.map((square, i) => (
+                                    <Square key={i} value={square} onClick={() => handleClick(i)} isWinning={winningLine?.includes(i)} />
+                                ))}
+                            </div>
+                        </motion.div>
+                        <div className="absolute -right-16 top-0 flex flex-col gap-4 max-md:static max-md:flex-row max-md:justify-center max-md:mt-8">
+                            <ControlButton icon={isSoundEnabled ? 'volume-2' : 'volume-x'} onClick={() => setIsSoundEnabled(!isSoundEnabled)} />
+                            <ControlButton icon="rotate-ccw" onClick={resetGame} />
+                        </div>
+                    </div>
+
+                    <motion.div className="mt-8 text-white/90 font-semibold text-lg glass-dark px-6 py-2 rounded-full" animate={{ scale: [1, 1.02, 1] }} transition={{ repeat: Infinity, duration: 2 }}>
+                        {winner ? `Winner: ${winner === 'X' ? playerNames.X : playerNames.O}` : board.every(s => s) ? "It's a Draw!" : `Turn: ${xIsNext ? playerNames.X : playerNames.O}`}
+                    </motion.div>
+
+                    <footer className="mt-12 text-white/60 text-sm font-medium">
+                        All Right Reserved By <a href="https://www.facebook.com/imzahed" target="_blank" rel="noopener noreferrer" className="text-white hover:text-white/90 transition-colors">Zahed</a>
+                    </footer>
+
+                    <AnimatePresence>
+                        {showModal && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+                                <motion.div initial={{ scale: 0.5, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.5, opacity: 0 }} className="glass p-8 rounded-3xl max-w-sm w-full text-center">
+                                    <div className="mb-6 flex justify-center">
+                                        <div className="bg-white/20 p-4 rounded-full">
+                                            <i data-lucide="trophy" className="w-12 h-12 text-yellow-300"></i>
+                                        </div>
+                                    </div>
+                                    <h2 className="text-3xl font-bold text-white mb-2">{winner ? `${winner === 'X' ? playerNames.X : playerNames.O} Wins!` : "It's a Draw!"}</h2>
+                                    <p className="text-white/70 mb-8">{winner ? "Outstanding performance! Ready for another round?" : "A perfectly matched game. Rematch?"}</p>
+                                    <button onClick={resetGame} className="w-full py-4 bg-white text-indigo-600 font-bold rounded-2xl hover:bg-indigo-50 transition-colors shadow-lg active:scale-95">Play Again</button>
+                                </motion.div>
+                            </div>
+                        )}
+                    </AnimatePresence>
+                </div>
+            );
+        }
+
+        function Square({ value, onClick, isWinning }) {
+            return (
+                <motion.button whileHover={{ scale: 0.98, backgroundColor: "rgba(255, 255, 255, 0.15)" }} whileTap={{ scale: 0.95 }} onClick={onClick} className={`w-20 h-20 sm:w-24 sm:h-24 rounded-2xl flex items-center justify-center text-4xl sm:text-5xl font-black transition-all duration-300 ${isWinning ? 'bg-white/40 shadow-[0_0_20px_rgba(255,255,255,0.5)]' : 'bg-white/10'} ${value === 'X' ? 'text-indigo-100' : 'text-pink-100'}`}>
+                    <AnimatePresence mode="wait">
+                        {value && (
+                            <motion.span key={value} initial={{ scale: 0, rotate: -45, opacity: 0 }} animate={{ scale: 1, rotate: 0, opacity: 1 }} transition={{ type: "spring", stiffness: 300, damping: 15 }}>
+                                {value}
+                            </motion.span>
+                        )}
+                    </AnimatePresence>
+                </motion.button>
+            );
+        }
+
+        function ScoreCard({ label, score, active, color }) {
+            return (
+                <motion.div className={`glass-dark p-3 rounded-2xl text-center transition-all duration-500 ${active ? 'ring-2 ring-white/50 scale-105' : 'opacity-70'}`} animate={active ? { y: [0, -4, 0] } : {}} transition={{ repeat: Infinity, duration: 2 }}>
+                    <div className="text-[10px] uppercase tracking-widest text-white/50 font-bold mb-1">{label}</div>
+                    <div className={`text-2xl font-black ${color}`}>{score}</div>
+                </motion.div>
+            );
+        }
+
+        function ControlButton({ icon, onClick }) {
+            useEffect(() => { lucide.createIcons(); }, [icon]);
+            return (
+                <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={onClick} className="p-3 glass rounded-2xl text-white hover:bg-white/30 transition-colors">
+                    <i data-lucide={icon} className="w-6 h-6"></i>
+                </motion.button>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+        setTimeout(() => lucide.createIcons(), 100);
+    </script>
+</body>
+</html>
